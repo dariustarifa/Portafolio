@@ -1,0 +1,24 @@
+PORTAFOLIO · DARIUS BOUGEROL
+=============================
+
+CÓMO ABRIRLO
+- Doble clic en  index.html  (se abre en el navegador). Todo funciona salvo que los vídeos de YouTube se abren en una pestaña nueva.
+- Para que los vídeos se reproduzcan dentro de la propia web: doble clic en  abrir-web.command
+  (arranca un servidor local y abre http://localhost:8123). La primera vez macOS puede pedir permiso:
+  clic derecho > Abrir.
+- Al subirlo a un hosting (Netlify, Vercel, tu dominio…) los vídeos de YouTube funcionan solos.
+
+ESTRUCTURA
+- index.html          Inicio: logo animado + carrusel 3D de las 5 secciones
+- sobre-mi.html       Sobre mí (a la que lleva el botón Entrar y el logo)
+- retrato.html · comercial.html · documental.html · eventos.html   Fotografía
+- video.html          Vídeo (previsualización local + YouTube)
+- contacto.html       Contacto (WhatsApp con mensaje predefinido, Instagram, LinkedIn, mail, teléfono)
+- css/main.css        Estilos (medidas y colores de tu Figma, 3 temas: Oscuro · Claro · POP)
+- js/                 Animaciones (hover vivo, pila infinita, carrusel, intro de Sobre mí…)
+- assets/             Imágenes optimizadas, fuente Archivo y previsualizaciones de vídeo
+- _fuentes/           Datos extraídos de tu Figma y build.py (regenera las páginas: python3 build.py)
+
+TEXTOS Y ENLACES
+- Para cambiar un enlace (YouTube, Instagram…) edita build.py (arriba del todo) y ejecuta python3 build.py,
+  o cambia directamente el .html correspondiente.
