@@ -1,5 +1,6 @@
-/* Inicio: el logo escala y se coloca en su sitio, y aparece un carrusel 3D (estilo etienne.studio)
-   con las 5 secciones en movimiento. Cada diapositiva enlaza a la página/sección que muestra. */
+/* Inicio: el logo se arma pieza a pieza (D · B) con muelles suaves, se desplaza hasta la cabecera mientras
+   el carrusel 3D (estilo etienne.studio) se abre y gira hasta su sitio. Cada diapositiva enlaza a la
+   página/sección que muestra. */
 (function () {
   'use strict';
   var DB = window.DB, html = document.documentElement;
@@ -10,7 +11,7 @@
   var ring = $('#ring'), wrap = $('#ringwrap'), slides = $$('.slide', ring), N = slides.length;
   var labels = $$('#label span'), countEl = $('#count'), intro = $('#logoIntro'), P = labels.length;
   var vw = 0, vh = 0, mob = false, sw = 0, sh = 0, R = 0;
-  var rot = 0, rotT = 0, idx = -1, ready = false, lastInput = 0, snapT = null;
+  var rot = 0, rotT = 0, idx = -1, ready = false, lastInput = 0, snapT = null, bloom = 1, introLock = true;
   var STEP = 360 / N;
 
   function layout() {
@@ -18,19 +19,25 @@
     sw = mob ? Math.min(vw * 0.66, vh * 0.3 * 1.38) : Math.min(vw * 0.3, vh * 0.42 * 1.38);
     sh = sw / 1.38;
     R = (sw / 2) / Math.tan(Math.PI / N) + (mob ? 8 : 24);
-    slides.forEach(function (s, i) {
-      s.style.width = sw + 'px'; s.style.height = sh + 'px';
-      s.style.transform = 'translate(' + (-sw / 2) + 'px,' + (-sh / 2) + 'px) rotateY(' + (i * STEP) + 'deg) translateZ(' + R + 'px)';
-    });
+    slides.forEach(function (s) { s.style.width = sw + 'px'; s.style.height = sh + 'px'; });
+    place();
     ring.style.top = (mob ? 40 : 45) + '%';
     wrap.style.perspective = Math.round(Math.max(900, Math.min(vw, vh * 1.7) * 1.25)) + 'px';
     draw();
   }
 
+  /* cada diapositiva a su radio (bloom 0 → todas juntas en el centro, 1 → anillo completo) */
+  function place() {
+    var r = (R * bloom).toFixed(2);
+    slides.forEach(function (s, i) {
+      s.style.transform = 'translate(' + (-sw / 2) + 'px,' + (-sh / 2) + 'px) rotateY(' + (i * STEP) + 'deg) translateZ(' + r + 'px)';
+    });
+  }
+
   function draw() {
-    ring.style.transform = 'translateZ(' + (-R) + 'px) rotateY(' + (-rot).toFixed(3) + 'deg)';
+    ring.style.transform = 'translateZ(' + (-R * bloom).toFixed(2) + 'px) rotateY(' + (-rot).toFixed(3) + 'deg)';
     var f = rot / STEP, k = ((Math.round(f) % N) + N) % N;
-    if (k !== idx) setIndex(k);
+    if (k !== idx && !introLock) setIndex(k);
     mediaNear();
   }
 
@@ -48,6 +55,7 @@
     }
   }
   function mediaNear() {
+    if (!ready) return;   // los vídeos no se decodifican hasta que acabe la intro (animación más fluida)
     var f = rot / STEP;
     slides.forEach(function (s, i) {
       var near = Math.abs(DB.wrap(i - f, N)) < 1.4;
@@ -134,30 +142,81 @@
   });
   window.addEventListener('resize', layout);
 
-  /* ---- secuencia de entrada: logo grande → escala y posición → carrusel ---- */
+  /* ---- secuencia de entrada (sobria) ----
+     0,10 s  la D se desliza desde la izquierda y la B desde la derecha, con fundido y sin rebote
+     0,55 s  el punto aparece con un pequeño descenso suave
+     1,35 s  el logo asienta con un leve "respiro" de escala
+     1,55 s  se desplaza con suavidad hasta la cabecera mientras el anillo se abre y gira hasta su sitio  */
   function startIntro() {
     layout();
-    function finish() { ready = true; home.classList.add('is-ready'); html.classList.add('home-ready'); intro.style.display = 'none'; lastInput = performance.now(); }
+    function finish() {
+      if (ready) return;
+      if (stopI) { stopI(); stopI = null; }
+      ['pointerdown', 'keydown', 'wheel'].forEach(function (ev) { window.removeEventListener(ev, skip, true); });
+      bloom = 1; rot = rotT = 0; introLock = false; place(); draw();
+      ready = true; home.classList.add('is-ready', 'ui-on'); html.classList.add('home-ready', 'home-ui'); intro.style.display = 'none';
+      lastInput = performance.now(); mediaNear();
+    }
+    var stopI = null;
+    function skip() { finish(); }
     if (DB.reduced()) { finish(); return; }
+
+    var pD = $('.lp-d', intro), pO = $('.lp-o', intro), pB = $('.lp-b', intro), inner = $('.li-in', intro);
     var w0 = intro.offsetWidth, h0 = w0 * 406 / 643;
     var tgt = $('.hdr-home .logo').getBoundingClientRect();
-    var x0 = (vw - w0) / 2, y0 = (vh - h0) / 2, x1 = tgt.left, y1 = tgt.top, s1 = tgt.width / w0;
-    function put(x, y, s, op, blur) {
-      intro.style.transform = 'translate3d(' + x.toFixed(2) + 'px,' + y.toFixed(2) + 'px,0) scale(' + s.toFixed(4) + ')';
-      intro.style.opacity = op.toFixed(3);
-      intro.style.filter = blur > 0.05 ? 'blur(' + blur.toFixed(2) + 'px)' : 'none';
-    }
-    put(x0, y0, 0.82, 0, 14);
-    rot = rotT = -2 * STEP;   // el carrusel entra girando hasta su posición
-    draw();
-    DB.anim(1200, DB.ease.outExpo, function (e) { put(x0, y0, DB.lerp(0.82, 1, e), e, 14 * (1 - e)); }, function () {
-      setTimeout(function () {
-        home.classList.add('is-ready');
-        setTimeout(function () { rotT = 0; }, 250);
-        DB.anim(1500, DB.ease.inOutExpo, function (e) {
-          put(DB.lerp(x0, x1, e), DB.lerp(y0, y1, e), DB.lerp(1, s1, e), 1, 0);
-        }, function () { finish(); });
-      }, 550);
+    var x0 = (vw - w0) / 2, y0 = (vh - h0) / 2 - (mob ? 0 : vh * 0.03), x1 = tgt.left, y1 = tgt.top, s1 = tgt.width / w0;
+    var arc = Math.min(vh * 0.035, 34), SPIN = 260;
+    function S(k, d) { return new DB.Spring(0, k, d); }
+    // muelles críticos (sin rebote): la entrada es limpia y se frena con suavidad
+    var posD = S(64, 16), posB = S(64, 16), posO = S(90, 19), gs = S(130, 14.5), fl = S(46, 13.5);
+    var dx = Math.min(w0 * 0.9, vw * 0.3);
+    var T = 0, started = {}, landT = -1, bloomT0 = -1, BLOOM = 1750;
+    var eo = DB.ease.outExpo, cl = DB.clamp, lerp = DB.lerp;
+
+    // estado inicial: nada a la vista; el anillo recogido en el centro y girado
+    bloom = 0.06; rot = rotT = -SPIN; place(); draw();
+    intro.style.opacity = '1';
+    intro.style.transform = 'translate3d(' + x0.toFixed(2) + 'px,' + y0.toFixed(2) + 'px,0)';
+    ['pointerdown', 'keydown', 'wheel'].forEach(function (ev) { window.addEventListener(ev, skip, { capture: true, passive: true }); });
+
+    stopI = DB.tick(function (dt) {
+      T += dt;
+      if (T > 0.10 && !started.d) { started.d = 1; posD.t = 1; }
+      if (T > 0.24 && !started.b) { started.b = 1; posB.t = 1; }
+      if (T > 0.62 && !started.o) { started.o = 1; posO.t = 1; }
+      var pd = posD.step(dt), pb = posB.step(dt), po = posO.step(dt);
+      gs.step(dt);
+
+      // D y B: deslizamiento con fundido y un leve crecimiento, sin giros
+      pD.style.opacity = cl(pd * 2.2, 0, 1).toFixed(3);
+      pD.style.transform = 'translate3d(' + ((1 - pd) * -dx).toFixed(1) + 'px,0,0) scale(' + lerp(0.94, 1, cl(pd, 0, 1)).toFixed(4) + ')';
+      pB.style.opacity = cl(pb * 2.2, 0, 1).toFixed(3);
+      pB.style.transform = 'translate3d(' + ((1 - pb) * dx).toFixed(1) + 'px,0,0) scale(' + lerp(0.94, 1, cl(pb, 0, 1)).toFixed(4) + ')';
+
+      // punto: aparece creciendo con un descenso corto
+      if (started.o && landT < 0 && po > 0.985) { landT = T; }
+      pO.style.opacity = cl(po * 3, 0, 1).toFixed(3);
+      pO.style.transform = 'translate3d(0,' + ((1 - po) * -h0 * 0.42).toFixed(1) + 'px,0) scale(' + lerp(0.5, 1, cl(po, 0, 1)).toFixed(4) + ')';
+
+      // al completarse el logo, un pequeño "respiro" de escala
+      if (landT > 0 && !started.hop && T > landT + 0.12) { started.hop = 1; gs.x = 0.3; }
+
+      // desplazamiento a la cabecera (arco mínimo) + apertura del anillo
+      if (T > 1.55 && !started.fly) { started.fly = 1; fl.t = 1; bloomT0 = T; home.classList.add('is-ready'); }
+      var p = fl.step(dt), pc = cl(p, 0, 1);
+      var x = lerp(x0, x1, p), y = lerp(y0, y1, p) - arc * Math.sin(Math.PI * pc), sc = lerp(1, s1, p);
+      intro.style.transform = 'translate3d(' + x.toFixed(2) + 'px,' + y.toFixed(2) + 'px,0) scale(' + sc.toFixed(4) + ')';
+      inner.style.transform = 'scale(' + (1 + gs.v).toFixed(4) + ')';
+
+      var bq = 0;
+      if (bloomT0 > 0) {
+        bq = cl((T - bloomT0) * 1000 / BLOOM, 0, 1);
+        var e = eo(bq);
+        bloom = lerp(0.06, 1, e); rot = rotT = -(1 - e) * SPIN;
+        place(); draw();
+        if (bq > 0.35 && !started.ui) { started.ui = 1; home.classList.add('ui-on'); html.classList.add('home-ui'); setIndex(0); }
+      }
+      if (bq >= 1 && started.fly && Math.abs(fl.v - 1) < 0.003 && Math.abs(fl.x) < 0.05 && Math.abs(gs.v) < 0.004) finish();
     });
   }
   document.addEventListener('dbready', startIntro);

@@ -9,7 +9,7 @@
   /* Reparto en columnas                                                */
   /* ---------------------------------------------------------------- */
   var gals = Array.prototype.slice.call(document.querySelectorAll('.gal'));
-  gals.forEach(function (g) { g._cols = Array.prototype.slice.call(g.querySelectorAll(':scope > .col')); g._items = Array.prototype.slice.call(g.querySelectorAll('.ph')); });
+  gals.forEach(function (g) { g._cols = Array.prototype.slice.call(g.querySelectorAll(':scope > .col')); g._items = Array.prototype.slice.call(g.querySelectorAll('.col .ph')); });
   var mode = null;
   function layout() {
     var m = DB.isMobile() ? 2 : 3;

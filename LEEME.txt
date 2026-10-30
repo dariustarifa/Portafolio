@@ -9,8 +9,8 @@ CÓMO ABRIRLO
 - Al subirlo a un hosting (Netlify, Vercel, tu dominio…) los vídeos de YouTube funcionan solos.
 
 ESTRUCTURA
-- index.html          Inicio: logo animado + carrusel 3D de las 5 secciones
-- sobre-mi.html       Sobre mí (a la que lleva el botón Entrar y el logo)
+- index.html          Inicio: logo animado + carrusel 3D de las 5 secciones (a ella lleva el logo de todas las páginas)
+- sobre-mi.html       Sobre mí (a la que lleva el botón Entrar y el menú)
 - retrato.html · comercial.html · documental.html · eventos.html   Fotografía
 - video.html          Vídeo (previsualización local + YouTube)
 - contacto.html       Contacto (WhatsApp con mensaje predefinido, Instagram, LinkedIn, mail, teléfono)

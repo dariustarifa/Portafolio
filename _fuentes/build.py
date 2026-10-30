@@ -25,6 +25,14 @@ YT = dict(loser='LtIbkp0vARo', starwars='BTB1am1jEcQ', epico='qYdGZHClr9s',
           airbnb='7PN0ojebiNw', carmen='UbR8HcodsA4', sentimental='jB1jmcbXkdM')
 
 ARROW = ('<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 17 17 7"/><path d="M8 7h9v9"/></svg>')
+# Iconos de redes: línea fina monocroma (usan el color de la píldora)
+ICON_IG = ('<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="5.2"/>'
+           '<circle cx="12" cy="12" r="4.1"/><circle cx="17.3" cy="6.7" r="0.6" fill="currentColor" stroke="none"/></svg>')
+ICON_IN = ('<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="3.2"/>'
+           '<path d="M8 10.5V16"/><circle cx="8" cy="7.9" r="0.6" fill="currentColor" stroke="none"/>'
+           '<path d="M11.4 16v-5.5M11.4 12.8c0-1.4.9-2.4 2.3-2.4 1.5 0 2.3.9 2.3 2.5V16"/></svg>')
+ICON_WA = ('<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3.6 20.4l1.2-4.3A8.6 8.6 0 1 1 8 19.3z"/>'
+           '<path d="M9 8.6c0 3.4 2.9 6.4 6.3 6.4.5-.1 1.1-.6 1.1-1.1l-1.8-1.1c-.4.1-.8.8-1.2.7-1.1-.4-2.1-1.4-2.5-2.5-.1-.4.6-.8.7-1.2L10.5 7.6c-.5 0-1.5.5-1.5 1z"/></svg>')
 PLAY = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5.5v13a1 1 0 0 0 1.5.86l10.5-6.5a1 1 0 0 0 0-1.72L9.5 4.64A1 1 0 0 0 8 5.5z"/></svg>'
 
 
@@ -95,6 +103,87 @@ def gallery(b, sid, alt, rad, colgap=45, rowgap=30, start=0):
     return '\n'.join(out), n
 
 
+def pack_hero(b, hero, cg, rg, cwid, tall):
+    """Reparte las fotos de una galería en 3 columnas para que la foto grande ocupe 2 columnas.
+    La columna alta (tall) arranca arriba, junto a la foto grande; las otras dos arrancan debajo.
+    Búsqueda local (mover / intercambiar fotos) para igualar alturas en px de diseño, cambiando lo mínimo
+    respecto a la distribución del Figma. Dentro de cada columna se conserva el orden vertical original."""
+    colw = (cwid - 2 * cg) / 3.0
+    hero_h = (2 * colw + cg) * hero['h'] / hero['w']
+    items = []
+    for ci, col in enumerate(b['cols']):
+        for it in col:
+            items.append({'it': it, 'c0': ci, 'c': ci, 'h': colw * it['h'] / it['w']})
+    off = [0 if ci == tall else hero_h + rg for ci in range(3)]
+
+    def heights():
+        hs = []
+        for ci in range(3):
+            xs = [i for i in items if i['c'] == ci]
+            hs.append(off[ci] + sum(i['h'] for i in xs) + rg * max(0, len(xs) - 1) if xs else off[ci])
+        return hs
+
+    def cost():
+        hs = heights()
+        return (max(hs) - min(hs)) + 0.4 * sum(1 for i in items if i['c'] != i['c0'])
+
+    cur = cost()
+    for _ in range(80):
+        best, act = cur, None
+        for x in items:
+            for c in range(3):
+                if c == x['c']:
+                    continue
+                old = x['c']; x['c'] = c
+                v = cost(); x['c'] = old
+                if v < best - 1e-6:
+                    best, act = v, ('m', x, c)
+        for xi, x in enumerate(items):
+            for y in items[xi + 1:]:
+                if x['c'] == y['c']:
+                    continue
+                x['c'], y['c'] = y['c'], x['c']
+                v = cost()
+                x['c'], y['c'] = y['c'], x['c']
+                if v < best - 1e-6:
+                    best, act = v, ('s', x, y)
+        if not act:
+            break
+        if act[0] == 'm':
+            act[1]['c'] = act[2]
+        else:
+            act[1]['c'], act[2]['c'] = act[2]['c'], act[1]['c']
+        cur = best
+    cols = [[], [], []]
+    for x in sorted(items, key=lambda i: (i['it']['y'], i['c0'])):
+        cols[x['c']].append(x['it'])
+    return cols
+
+
+def hero_gallery(hero, b, sid, alt, rad, colgap, rowgap, cwid=1456, flip=False, mt=60, eager=False):
+    """Foto grande + rejilla en una sola cuadrícula: la foto grande ocupa 2 columnas y la rejilla sigue a su lado."""
+    tall = 0 if flip else 2
+    cols = pack_hero(b, hero, colgap, rowgap, cwid, tall)
+    colw = (cwid - 2 * colgap) / 3.0
+    out = ['<div class="sp" %s><div class="gal has-hero%s" style="--cg:%s;--rg:%s">' % (sp(mt), ' flip' if flip else '', rem(colgap), rem(rowgap))]
+    out.append(photo(hero['img'], hero['w'], hero['h'], rad if rad is not None else (hero.get('r') or 5), sid, 0, alt,
+                     kind='hero', eager=eager, T=hero.get('T') if hero.get('mode') == 'STRETCH' else None))
+    n = 1
+    for ci, col in enumerate(cols):
+        out.append('<div class="col" data-col="%d">' % ci)
+        yy = 0
+        for it in col:
+            r = rad if rad is not None else (it.get('r') or 5)
+            out.append(photo(it['img'], it['w'], it['h'], r, sid, n, alt, y=round(yy), col=ci,
+                             T=it.get('T') if it.get('mode') == 'STRETCH' else None,
+                             filt='bw' if (it.get('filter') or {}).get('vibrance') == -1 else None))
+            yy += colw * it['h'] / it['w'] + rowgap
+            n += 1
+        out.append('</div>')
+    out.append('</div></div>')
+    return '\n'.join(out)
+
+
 def runs_html(runs, base_w):
     out = []
     for r in runs:
@@ -132,6 +221,7 @@ def heading(text, mt, cls='hd', sid=None):
 # --------------------------------------------------------------------------
 # Estructura común
 # --------------------------------------------------------------------------
+TOP_MT = 167   # margen (px de diseño) del primer título: queda donde antes estaba el menú de filtros
 NAV = [('sobre', 'sobre-mi.html', 'Sobre mí'), ('foto', 'retrato.html', 'Fotografía'), ('video', 'video.html', 'Vídeo')]
 FILT = [('retrato', 'retrato.html', 'Retrato'), ('comercial', 'comercial.html', 'Comercial'),
         ('documental', 'documental.html', 'Documental'), ('eventos', 'eventos.html', 'Eventos')]
@@ -162,7 +252,7 @@ setTimeout(function(){{d.classList.remove('is-loading')}},2500)}})();
 
 
 def logo_html(home=False):
-    return ('<a class="logo" href="sobre-mi.html" aria-label="Darius Bougerol · Sobre mí">'
+    return ('<a class="logo" href="index.html" aria-label="Darius Bougerol · Inicio">'
             '<img class="lg-cream" src="assets/img/fc7e46a07f02.png" alt="D·B" width="643" height="406">'
             '<img class="lg-dark" src="assets/img/b65746082939.png" alt="" width="642" height="409"></a>')
 
@@ -174,9 +264,9 @@ def header(pg, mode=''):
         return f'<header class="hdr hdr-home" id="hdr"><div class="cv">{logo_html()}</div></header>'
     if pg.key == 'contacto':
         right = f'''<div class="icons" aria-label="Redes">
-<a class="pill" href="{URL['wa']}" target="_blank" rel="noopener" aria-label="WhatsApp"><i class="hl"></i><img src="assets/img/eba7bc9935e3.png" alt="" width="81" height="81"></a>
-<a class="pill" href="{URL['insta']}" target="_blank" rel="noopener" aria-label="Instagram"><i class="hl"></i><img src="assets/img/62410073702e.png" alt="" width="88" height="88"></a>
-<a class="pill" href="{URL['linked']}" target="_blank" rel="noopener" aria-label="LinkedIn"><i class="hl"></i><img src="assets/img/6938ffaf65d5.png" alt="" width="89" height="89"></a>
+<a class="pill" href="{URL['wa']}" target="_blank" rel="noopener" aria-label="WhatsApp"><i class="hl"></i>{ICON_WA}</a>
+<a class="pill" href="{URL['insta']}" target="_blank" rel="noopener" aria-label="Instagram"><i class="hl"></i>{ICON_IG}</a>
+<a class="pill" href="{URL['linked']}" target="_blank" rel="noopener" aria-label="LinkedIn"><i class="hl"></i>{ICON_IN}</a>
 </div>'''
     else:
         right = (f'<a class="contact pill" href="contacto.html" data-k="contacto"><i class="hl"></i>'
@@ -203,11 +293,17 @@ def theme_switch():
 
 
 def filters(active):
+    """barra fija inferior: Retrato · Comercial · Documental · Eventos"""
     a = ''.join('<a href="%s" data-k="%s"%s>%s</a>' % (h, k, ' aria-current="page"' if k == active else '', t) for k, h, t in FILT)
-    return f'<div class="blk filters-wrap"><div class="filters"><div class="pill" id="filters"><i class="hl"></i>{a}</div></div></div>'
+    return f'<nav class="fbar pill" id="filters" aria-label="Fotografía"><i class="hl"></i>{a}</nav>'
 
 
-def footer():
+def footer(minimal=False):
+    if minimal:   # contacto: la página ya muestra los datos, el pie solo lleva los derechos de autoría
+        return '''<footer class="ftr ftr-min rv">
+<p class="copy">©2026 Darius Bougerol</p>
+<p class="legal">Todas las imágenes presentes en esta web están sujetas a derechos de autoría, y no pueden ser usadas en ningún caso sin acuerdo previo del autor.</p>
+</footer>'''
     return f'''<footer class="ftr rv">
 <p class="copy">©2026 Darius Bougerol</p>
 <p class="legal">Todas las imágenes presentes en esta web están sujetas a derechos de autoría, y no pueden ser usadas en ningún caso sin acuerdo previo del autor.</p>
@@ -229,7 +325,7 @@ def tail(pg, extra_js=()):
 <div class="ctl hint">Desliza · rueda · flechas</div>
 </div>
 <div class="curtain" aria-hidden="true"></div>
-<div class="cur" aria-hidden="true"><i class="ring"></i><i class="dot"></i></div>
+<div class="cur" aria-hidden="true"><svg viewBox="0 0 22 31"><path d="M2 2v24.6l6-5.7 4.2 9.6 4-1.8-4.1-9.3H20.2z"/></svg></div>
 {js}</body>
 </html>
 '''
@@ -237,6 +333,8 @@ def tail(pg, extra_js=()):
 
 def write(pg, body, extra_js=(), mode=''):
     out = head(pg, mode) + header(pg, mode) + '\n' + body + '\n' + theme_switch()
+    if pg.key in [k for k, _, _ in FILT]:
+        out += '\n' + filters(pg.key)
     if mode != 'home':
         out += '\n' + mobile_nav(pg)
     out += tail(pg, extra_js)
@@ -247,26 +345,18 @@ def write(pg, body, extra_js=(), mode=''):
 # --------------------------------------------------------------------------
 # Páginas fotográficas
 # --------------------------------------------------------------------------
-def section_block(sid, title, hero, gals, rad, mt_head, colgap, rowgap, inset=None, first_alt='', alt=''):
-    """cabecera + hero + galerías(s). Devuelve html"""
+def section_block(sid, title, hero, gals, rad, mt_head, colgap, rowgap, inset=None, first_alt='', alt='', flip=False, first=False):
+    """cabecera + foto grande integrada en la rejilla. Devuelve html"""
     o = []
     cls = 'blk sec' + (' inset' if inset else '')
     st = ' style="--inset:%srem"' % rem(inset) if inset else ''
     o.append('<section class="%s" data-sec="%s"%s>' % (cls, sid, st))
     if title:
-        o.append(heading(title, mt_head, sid=sid))
-    n = 0
-    if hero:
-        hmt = 60 if title else mt_head
-        o.append('<div class="sp hero-wrap" %s>' % sp(hmt))
-        o.append(photo(hero['img'], hero['w'], hero['h'], rad if rad is not None else (hero.get('r') or 5), sid, n, alt,
-                       kind='hero', eager=(mt_head < 120 and sid in ('retrato', 'comercial', 'documental', 'fiestas-noche')),
-                       T=hero.get('T') if hero.get('mode') == 'STRETCH' else None))
-        o.append('</div>')
-        n += 1
-    for g in gals:
-        gh, n = gallery(g, sid, alt, rad, colgap, rowgap, start=n)
-        o.append('<div class="sp" %s>%s</div>' % (sp(54), gh))
+        o.append(heading(title, TOP_MT if first else mt_head, cls='hd top' if first else 'hd', sid=sid))
+    cwid = 1616 - 2 * (inset if inset else 80)
+    hmt = 60 if title else mt_head
+    o.append(hero_gallery(hero, gals[0], sid, alt, rad, colgap, rowgap, cwid=cwid, flip=flip, mt=hmt,
+                          eager=bool(first)))
     o.append('</section>')
     return '\n'.join(o)
 
@@ -280,23 +370,15 @@ def build_retrato():
               desc='Fotografía de retrato en Granada · Darius Bougerol.')
     b = blocks('retrato')
     hero, g1, feat, g2 = b[1], b[2], b[3], b[4]
-    body = ['<main class="pg">', filters('retrato')]
-    body.append('<div class="blk">' + heading('Retratos.', 129, sid='retratos') + '</div>')
+    body = ['<main class="pg">']
+    body.append('<div class="blk">' + heading('Retratos.', TOP_MT, cls='hd top', sid='retratos') + '</div>')
     # sección 1: hero + galería 1
     body.append('<section class="blk sec" data-sec="retrato-a">')
-    body.append('<div class="sp hero-wrap" %s>' % sp(60))
-    body.append(photo(hero['img'], hero['w'], hero['h'], 5, 'retrato-a', 0, 'Retrato', kind='hero', eager=True))
-    body.append('</div>')
-    gh, n = gallery(g1, 'retrato-a', 'Retrato', 5, start=1)
-    body.append('<div class="sp" %s>%s</div>' % (sp(54), gh))
+    body.append(hero_gallery(hero, g1, 'retrato-a', 'Retrato', 5, 45, 30, mt=60, eager=True))
     body.append('</section>')
-    # sección 2: feature + galería 2
+    # sección 2: foto grande + galería 2 (la foto grande pasa al otro lado)
     body.append('<section class="blk sec" data-sec="retrato-b">')
-    body.append('<div class="sp hero-wrap" %s>' % sp(44))
-    body.append(photo(feat['img'], feat['w'], feat['h'], 5, 'retrato-b', 0, 'Retrato', kind='hero'))
-    body.append('</div>')
-    gh, n = gallery(g2, 'retrato-b', 'Retrato', 5, start=1)
-    body.append('<div class="sp" %s>%s</div>' % (sp(48), gh))
+    body.append(hero_gallery(feat, g2, 'retrato-b', 'Retrato', 5, 45, 30, mt=44, flip=True))
     body.append('</section>')
     body.append(footer())
     body.append('</main>')
@@ -307,12 +389,12 @@ def build_comercial():
     pg = Page('comercial.html', 'comercial', 'Comercial · Darius Bougerol', 'foto',
               desc='Fotografía comercial: hostelería, tratamientos y producto.')
     b = blocks('comercial')
-    body = ['<main class="pg">', filters('comercial')]
+    body = ['<main class="pg">']
     secs = [('hosteleria', 'Hostelería.', b[1], b[2], 129),
             ('masaje', 'Masaje tratamientos', b[4], b[5], 101),
             ('producto', 'Producto', b[7], b[8], 78)]
-    for sid, title, hero, g, mt in secs:
-        body.append(section_block(sid, title, hero, [g], 5, mt, 45, 30, alt=title.rstrip('.')))
+    for k, (sid, title, hero, g, mt) in enumerate(secs):
+        body.append(section_block(sid, title, hero, [g], 5, mt, 45, 30, alt=title.rstrip('.'), flip=bool(k % 2), first=(k == 0)))
     body.append('<div class="blk"><a class="cta pill sp" %s href="eventos.html"><i class="hl"></i>'
                 '<span>Descubre cómo cubro eventos comerciales aquí</span><span class="arrow">%s</span></a></div>'
                 % (sp(53), ARROW))
@@ -325,8 +407,8 @@ def build_documental():
     pg = Page('documental.html', 'documental', 'Documental · Darius Bougerol', 'foto',
               desc='Fotografía documental · Darius Bougerol.')
     b = blocks('documental')
-    body = ['<main class="pg">', filters('documental')]
-    body.append('<div class="blk">' + heading('Documental.', 129, sid='documental') + '</div>')
+    body = ['<main class="pg">']
+    body.append('<div class="blk">' + heading('Documental.', TOP_MT, cls='hd top', sid='documental') + '</div>')
     body.append(section_block('documental-a', None, b[0], [b[1]], 5, 60, 45, 30, alt='Documental'))
     body.append(footer())
     body.append('</main>')
@@ -337,17 +419,17 @@ def build_eventos():
     pg = Page('eventos.html', 'eventos', 'Eventos · Darius Bougerol', 'foto',
               desc='Fotografía de eventos: fiestas, graduaciones y más.')
     b = blocks('eventos')
-    body = ['<main class="pg">', filters('eventos')]
+    body = ['<main class="pg">']
     secs = [('fiestas-noche', 'Fiestas. De noche.', b[1], b[2], 5, 129),
-            ('fiestas-dia', 'Fiestas. De día.', b[4], b[5], 30, 111),
-            ('graduaciones', 'Graduaciones.', b[7], b[8], 30, 111),
-            ('otros', 'Otros.', b[10], b[11], 30, 111)]
-    for sid, title, hero, g, rad, mt in secs:
-        body.append(section_block(sid, title, hero, [g], rad, mt, 32, 32, inset=115, alt=title))
+            ('fiestas-dia', 'Fiestas. De día.', b[4], b[5], 5, 111),
+            ('graduaciones', 'Graduaciones.', b[7], b[8], 5, 111),
+            ('otros', 'Otros.', b[10], b[11], 5, 111)]
+    for k, (sid, title, hero, g, rad, mt) in enumerate(secs):
+        body.append(section_block(sid, title, hero, [g], rad, mt, 32, 32, inset=115, alt=title, flip=bool(k % 2), first=(k == 0)))
     f = b[12]
     body.append('<section class="blk sec inset" style="--inset:1.15rem">'
                 '<div class="sp hero-wrap" %s>%s</div></section>'
-                % (sp(111), photo(f['img'], f['w'], f['h'], 98, 'eventos-final', 0, 'Eventos', kind='hero')))
+                % (sp(111), photo(f['img'], f['w'], f['h'], 5, 'eventos-final', 0, 'Eventos', kind='hero')))
     body.append(footer())
     body.append('</main>')
     write(pg, '\n'.join(body), ('gallery', 'stack'))
@@ -431,16 +513,16 @@ def build_contacto():
     pg = Page('contacto.html', 'contacto', 'Contacto · Darius Bougerol', 'contacto',
               desc='Contacta con Darius Bougerol: WhatsApp, Instagram, LinkedIn, correo y teléfono.')
     body = ['<main class="pg page-contacto">',
-            f'''<div class="blk"><div class="contact-pills sp" {sp(288)}>
+            f'''<div class="blk"><div class="contact-pills sp" {sp(240)}>
 <a class="pill rv" href="{URL['tel']}"><i class="hl"></i><span>Tel: +34 615 538 455</span></a>
 <a class="pill rv" href="{URL['mail']}"><i class="hl"></i><span>Mail: dariusbougerol@gmail.com</span></a>
 <a class="pill rv" href="{URL['insta']}" target="_blank" rel="noopener"><i class="hl"></i><span>Instagram: Ithe_6</span></a>
 </div></div>''',
             '<div class="icons-m" aria-label="Redes">'
-            f'<a class="pill" href="{URL["wa"]}" target="_blank" rel="noopener" aria-label="WhatsApp"><img src="assets/img/eba7bc9935e3.png" alt="" width="81" height="81"></a>'
-            f'<a class="pill" href="{URL["insta"]}" target="_blank" rel="noopener" aria-label="Instagram"><img src="assets/img/62410073702e.png" alt="" width="88" height="88"></a>'
-            f'<a class="pill" href="{URL["linked"]}" target="_blank" rel="noopener" aria-label="LinkedIn"><img src="assets/img/6938ffaf65d5.png" alt="" width="89" height="89"></a></div>',
-            footer(), '</main>']
+            f'<a class="pill" href="{URL["wa"]}" target="_blank" rel="noopener" aria-label="WhatsApp">{ICON_WA}</a>'
+            f'<a class="pill" href="{URL["insta"]}" target="_blank" rel="noopener" aria-label="Instagram">{ICON_IG}</a>'
+            f'<a class="pill" href="{URL["linked"]}" target="_blank" rel="noopener" aria-label="LinkedIn">{ICON_IN}</a></div>',
+            footer(True), '</main>']
     write(pg, '\n'.join(body), ())
 
 
@@ -492,11 +574,14 @@ def build_home():
                             % (' on' if j == 0 else '', '#spot' if c == 'airbnb' else '', c, c) for j, c in enumerate(clips))
         sl.append(f'<a class="slide" href="{href}" data-name="{name}" aria-label="{name}">{inner}</a>')
     labels = ''.join('<span>%s</span>' % s[0] for s in A)
+    LOGO_PARTS = ''.join('<span class="lp lp-%s"><img class="lg-cream" src="assets/img/fc7e46a07f02.png" alt="" width="643" height="406"><img class="lg-dark" src="assets/img/b65746082939.png" alt="" width="642" height="409"></span>' % k for k in ('d', 'o', 'b'))
     body = f'''<main class="home" id="home">
 <div class="ringwrap" id="ringwrap"><div class="ring" id="ring">
 {chr(10).join(sl)}
 </div></div>
-<div class="logo-intro" id="logoIntro"><img class="lg-cream" src="assets/img/fc7e46a07f02.png" alt="" width="643" height="406"><img class="lg-dark" src="assets/img/b65746082939.png" alt="" width="642" height="409"></div>
+<div class="logo-intro" id="logoIntro" aria-hidden="true"><div class="li-in">
+{LOGO_PARTS}
+</div></div>
 <div class="homeui" id="homeui">
 <div class="label" id="label" aria-live="polite">{labels}</div>
 <div class="count" id="count">01 / 05</div>
